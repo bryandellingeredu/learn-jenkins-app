@@ -48,40 +48,44 @@ pipeline {
             }
         }
 
-         stage('E2E') {
-  agent {
-    docker {
-      image 'node:18-bullseye'   // or node:20-bookworm
-      reuseNode true
-    }
-  }
-  environment {
-    PLAYWRIGHT_JUNIT_OUTPUT = 'test-results/junit.xml'
-  }
-  steps {
-    sh '''
-      node --version
-      npm --version
+        stage('E2E') {
+            agent {
+                docker {
+                image 'node:18-bullseye'        // Debian-based, not Alpine
+                args '-u root'                  // <-- run as root so --with-deps can apt-get
+                reuseNode true
+                }
+            }
+            environment {
+                PLAYWRIGHT_JUNIT_OUTPUT = 'test-results/junit.xml'
+            }
+            steps {
+                sh '''
+                set -e
 
-      # ensure deps & browsers are installed in this container
-      npm ci
-      npx playwright install --with-deps
+                # basics sometimes missing in slim images
+                apt-get update -y
+                apt-get install -y curl
 
-      # serve build in background (no global install needed)
-      nohup npx serve -s build -l 3000 >/dev/null 2>&1 &
+                node --version
+                npm --version
 
-      # wait until server is up
-      for i in $(seq 1 30); do
-        curl -sf http://127.0.0.1:3000 >/dev/null && break
-        sleep 1
-      done
+                npm ci
+                npx playwright install --with-deps
 
-      # run tests and export JUnit for Jenkins
-      npx playwright test --reporter=junit,line
-    '''
-  }
-}
+                # serve build in background
+                nohup npx serve -s build -l 3000 >/dev/null 2>&1 &
 
+                # wait for server
+                for i in $(seq 1 30); do
+                    curl -sf http://127.0.0.1:3000 >/dev/null && break
+                    sleep 1
+                done
+
+                npx playwright test --reporter=junit,line
+                '''
+            }
+        }
     }
 
     post{
