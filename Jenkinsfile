@@ -42,7 +42,7 @@ pipeline {
             }
             steps {
                 sh '''
-                test -f buld/index.html
+                test -f build/index.html
                 npm test
                 '''
             }
