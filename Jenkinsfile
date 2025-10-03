@@ -48,21 +48,40 @@ pipeline {
             }
         }
 
-          stage('E2E'){
-            agent {
-                docker {
-                   image 'mcr.microsoft.com/playwright:v1.55.0-noble'
-                    reuseNode true
-                }
-            }
-            steps {
-                sh '''
-                   npm install -g server
-                   serve -s build
-                   npx playwright test
-                '''
-            }
-        }
+         stage('E2E') {
+  agent {
+    docker {
+      image 'node:18-bullseye'   // or node:20-bookworm
+      reuseNode true
+    }
+  }
+  environment {
+    PLAYWRIGHT_JUNIT_OUTPUT = 'test-results/junit.xml'
+  }
+  steps {
+    sh '''
+      node --version
+      npm --version
+
+      # ensure deps & browsers are installed in this container
+      npm ci
+      npx playwright install --with-deps
+
+      # serve build in background (no global install needed)
+      nohup npx serve -s build -l 3000 >/dev/null 2>&1 &
+
+      # wait until server is up
+      for i in $(seq 1 30); do
+        curl -sf http://127.0.0.1:3000 >/dev/null && break
+        sleep 1
+      done
+
+      # run tests and export JUnit for Jenkins
+      npx playwright test --reporter=junit,line
+    '''
+  }
+}
+
     }
 
     post{
